@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,15 +26,20 @@ type Reporter struct {
 }
 
 // NewReporter creates a Reporter with sensible defaults.
-func NewReporter(serverURL, apiKey string, logger *log.Logger) *Reporter {
+func NewReporter(serverURL, apiKey string, insecure bool, logger *log.Logger) *Reporter {
 	if logger == nil {
 		logger = log.New(os.Stdout, "", log.LstdFlags)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if insecure {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	return &Reporter{
 		ServerURL: serverURL,
 		APIKey:    apiKey,
 		Client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
 		},
 		Logger: logger,
 	}
@@ -77,7 +83,7 @@ func (r *Reporter) Report(metric *model.Metric, services []model.Service, hostIn
 
 // RunLoop starts the collection and reporting loop with graceful shutdown.
 func RunLoop(cfg *Config, logger *log.Logger) {
-	reporter := NewReporter(cfg.Server, cfg.APIKey, logger)
+	reporter := NewReporter(cfg.Server, cfg.APIKey, cfg.Insecure, logger)
 	interval := time.Duration(cfg.IntervalSec) * time.Second
 	collectSvc := !cfg.NoServices
 

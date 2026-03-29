@@ -17,6 +17,7 @@ func main() {
 		apiKey     = flag.String("key", "", "API key for this host")
 		interval   = flag.Duration("interval", 60*time.Second, "reporting interval")
 		noSvc      = flag.Bool("no-services", false, "skip service collection")
+		insecure   = flag.Bool("insecure", false, "skip TLS certificate verification (for self-signed certs)")
 		configPath = flag.String("config", "", "config file path (default: /etc/hostman/agent.json)")
 		logFile    = flag.String("log", "", "log file path (default: stdout)")
 		version    = flag.Bool("version", false, "show version")
@@ -69,6 +70,9 @@ func main() {
 	}
 	if *noSvc {
 		cfg.NoServices = true
+	}
+	if *insecure {
+		cfg.Insecure = true
 	}
 	if *logFile != "" {
 		cfg.LogFile = *logFile

@@ -14,6 +14,7 @@ type Config struct {
 	IntervalSec int    `json:"interval_sec"`
 	NoServices  bool   `json:"no_services"`
 	LogFile     string `json:"log_file"`
+	Insecure    bool   `json:"insecure"` // skip TLS certificate verification
 }
 
 const defaultConfigPath = "/etc/hostman/agent.json"
