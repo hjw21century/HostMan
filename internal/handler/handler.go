@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"html/template"
@@ -69,6 +70,12 @@ func New(db *store.DB, sessions *middleware.SessionStore, tmplDir string) (*Hand
 				return fmt.Sprintf("已过期 %d 天", int(-d))
 			}
 			return fmt.Sprintf("%d 天", int(d))
+		},
+		"daysUntilN": func(t *time.Time) int {
+			if t == nil {
+				return 9999
+			}
+			return int(time.Until(*t).Hours() / 24)
 		},
 		"seq": func(n int) []int {
 			s := make([]int, n)
@@ -148,6 +155,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		auth.POST("/hosts/:id/genkey", h.GenAPIKey)
 		auth.GET("/settings/password", h.ChangePasswordPage)
 		auth.POST("/settings/password", h.ChangePassword)
+		auth.GET("/export/hosts", h.ExportHosts)
 	}
 }
 
@@ -236,6 +244,21 @@ func (h *Handler) Dashboard(c *gin.Context) {
 
 	expiring, _ := h.DB.ExpiringHosts(30 * 24 * time.Hour)
 
+	// Calculate monthly cost (normalize all billing cycles to monthly)
+	var monthlyCost float64
+	for _, hw := range hosts {
+		switch hw.BillingCycle {
+		case "monthly":
+			monthlyCost += hw.Cost
+		case "quarterly":
+			monthlyCost += hw.Cost / 3
+		case "yearly":
+			monthlyCost += hw.Cost / 12
+		default:
+			monthlyCost += hw.Cost
+		}
+	}
+
 	data := gin.H{
 		"Title":         "仪表板",
 		"Hosts":         hosts,
@@ -243,6 +266,7 @@ func (h *Handler) Dashboard(c *gin.Context) {
 		"OnlineHosts":   countByStatus(hosts, "online"),
 		"OfflineHosts":  countByStatus(hosts, "offline"),
 		"ExpiringHosts": expiring,
+		"MonthlyCost":   monthlyCost,
 	}
 	h.render(c, "dashboard.html", data)
 }
@@ -337,6 +361,48 @@ func (h *Handler) GenAPIKey(c *gin.Context) {
 	key := generateKey()
 	h.DB.SetHostAPIKey(id, key)
 	c.Redirect(302, fmt.Sprintf("/hosts/%d", id))
+}
+
+func (h *Handler) ExportHosts(c *gin.Context) {
+	hosts, err := h.DB.ListHosts()
+	if err != nil {
+		c.String(500, "db error: %v", err)
+		return
+	}
+
+	format := c.DefaultQuery("format", "csv")
+	ts := time.Now().Format("20060102_150405")
+
+	if format == "json" {
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="hostman_export_%s.json"`, ts))
+		c.JSON(200, hosts)
+		return
+	}
+
+	// CSV export
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="hostman_export_%s.csv"`, ts))
+	c.Writer.Write([]byte("\xEF\xBB\xBF")) // UTF-8 BOM for Excel
+
+	w := csv.NewWriter(c.Writer)
+	w.Write([]string{"名称", "IP", "供应商", "套餐", "费用", "货币", "计费周期", "订阅日期", "到期日期", "状态", "备注"})
+
+	for _, h := range hosts {
+		subAt := ""
+		if h.SubscribeAt != nil {
+			subAt = h.SubscribeAt.Format("2006-01-02")
+		}
+		expAt := ""
+		if h.ExpireAt != nil {
+			expAt = h.ExpireAt.Format("2006-01-02")
+		}
+		w.Write([]string{
+			h.Name, h.IP, h.Provider, h.Plan,
+			fmt.Sprintf("%.2f", h.Cost), h.Currency, h.BillingCycle,
+			subAt, expAt, h.Status, h.Note,
+		})
+	}
+	w.Flush()
 }
 
 // ---------- API Endpoints ----------
