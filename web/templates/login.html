@@ -1,0 +1,42 @@
+{{define "login.html"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - HostMan</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1117; color: #e1e4e8; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 40px; width: 380px; }
+        .login-box h1 { text-align: center; margin-bottom: 8px; font-size: 24px; }
+        .login-box .brand { text-align: center; color: #8b949e; margin-bottom: 32px; font-size: 14px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #c9d1d9; }
+        .form-group input { width: 100%; padding: 10px 14px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e1e4e8; font-size: 15px; }
+        .form-group input:focus { outline: none; border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,0.2); }
+        .btn-login { width: 100%; padding: 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn-login:hover { background: #2ea043; }
+        .error-msg { background: #3d1215; color: #f85149; border: 1px solid #f8514966; border-radius: 6px; padding: 10px 14px; margin-bottom: 20px; font-size: 14px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>🖥️ HostMan</h1>
+        <div class="brand">主机管理系统</div>
+        {{if .Msg}}
+        <div class="error-msg">{{.Msg}}</div>
+        {{end}}
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="username" required autofocus placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" required placeholder="请输入密码">
+            </div>
+            <button type="submit" class="btn-login">登 录</button>
+        </form>
+    </div>
+</body>
+</html>{{end}}

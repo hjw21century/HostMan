@@ -1,0 +1,16 @@
+[Unit]
+Description=HostMan Agent - System Resource Reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/hostman/hostman-agent -config /etc/hostman/agent.json
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

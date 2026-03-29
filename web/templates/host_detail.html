@@ -1,0 +1,287 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<!-- 顶部标题栏 -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <div>
+        <h2 style="display: inline-flex; align-items: center; gap: 10px;">
+            {{.Host.Name}}
+            {{if eq .Host.Status "online"}}<span class="badge badge-green">在线</span>
+            {{else if eq .Host.Status "offline"}}<span class="badge badge-red">离线</span>
+            {{else}}<span class="badge badge-gray">未知</span>{{end}}
+        </h2>
+        {{if .Host.IP}}<p style="color: #8b949e; font-family: monospace; margin-top: 4px;">{{.Host.IP}}</p>{{end}}
+    </div>
+    <div class="actions">
+        <a href="/hosts/{{.Host.ID}}/edit" class="btn">编辑</a>
+        <form method="POST" action="/hosts/{{.Host.ID}}/genkey" style="display:inline;">
+            <button type="submit" class="btn btn-sm" onclick="return confirm('生成新的 API Key？旧 Key 将失效。')">🔑 生成 Key</button>
+        </form>
+        <form method="POST" action="/hosts/{{.Host.ID}}/delete" style="display:inline;">
+            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('确定删除这台主机？')">删除</button>
+        </form>
+    </div>
+</div>
+
+<!-- 系统信息 + 订阅信息 -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+    {{if .HostInfo}}{{if .HostInfo.Hostname}}
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-title">🔧 系统信息</div>
+        <table>
+            <tr><td style="color:#8b949e; width:90px; border:0;">主机名</td><td style="border:0; font-weight:500;">{{.HostInfo.Hostname}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">系统</td><td style="border:0;">{{.HostInfo.Distro}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">内核</td><td style="border:0; font-family:monospace; font-size:13px;">{{.HostInfo.Kernel}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">架构</td><td style="border:0;">{{.HostInfo.OS}}/{{.HostInfo.Arch}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">CPU</td><td style="border:0;">{{.HostInfo.CPUModel}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">核心</td><td style="border:0;">{{.HostInfo.CPUCores}} 核</td></tr>
+        </table>
+    </div>
+    {{end}}{{end}}
+
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-title">📋 订阅信息</div>
+        <table>
+            <tr><td style="color:#8b949e; width:90px; border:0;">供应商</td><td style="border:0; font-weight:500;">{{.Host.Provider}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">套餐</td><td style="border:0;">{{.Host.Plan}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">费用</td><td style="border:0;">{{fmtCost .Host.Cost .Host.Currency}} / {{.Host.BillingCycle}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">订阅日期</td><td style="border:0;">{{fmtTimePtr .Host.SubscribeAt}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">到期日期</td><td style="border:0;">{{fmtTimePtr .Host.ExpireAt}}</td></tr>
+            <tr><td style="color:#8b949e; border:0;">剩余</td><td style="border:0;"><span class="badge badge-yellow">{{daysUntil .Host.ExpireAt}}</span></td></tr>
+        </table>
+        {{if .Host.Note}}
+        <p style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #21262d; color: #8b949e; font-size: 13px;">{{.Host.Note}}</p>
+        {{end}}
+    </div>
+</div>
+
+<!-- 资源概览 -->
+{{if .Metric}}
+<div class="card">
+    <div class="card-title">📊 资源概览</div>
+    <div class="metric-grid">
+        <!-- CPU -->
+        <div class="metric-item">
+            <div class="label">CPU 使用率</div>
+            <div class="value" style="color:{{if lt .Metric.CPUPercent 60.0}}#3fb950{{else if lt .Metric.CPUPercent 85.0}}#d29922{{else}}#f85149{{end}}">{{fmtPct .Metric.CPUPercent}}</div>
+            <div class="progress-bar" style="margin-top: 8px;">
+                <div class="fill {{if lt .Metric.CPUPercent 60.0}}green{{else if lt .Metric.CPUPercent 85.0}}yellow{{else}}red{{end}}"
+                     style="width: {{fmtPct .Metric.CPUPercent}}"></div>
+            </div>
+        </div>
+        <!-- 内存 -->
+        <div class="metric-item">
+            <div class="label">内存</div>
+            <div class="value">{{fmtBytes .Metric.MemUsed}} <span style="color:#8b949e; font-size:14px;">/ {{fmtBytes .Metric.MemTotal}}</span></div>
+            <div class="progress-bar" style="margin-top: 8px;">
+                <div class="fill {{if lt (pctF .Metric.MemUsed .Metric.MemTotal) 70.0}}green{{else if lt (pctF .Metric.MemUsed .Metric.MemTotal) 90.0}}yellow{{else}}red{{end}}" style="width: {{pct .Metric.MemUsed .Metric.MemTotal}}%"></div>
+            </div>
+            <div style="font-size:11px; color:#8b949e; margin-top:4px;">缓冲: {{fmtBytes .Metric.MemBuffered}} | 缓存: {{fmtBytes .Metric.MemCached}}</div>
+        </div>
+        <!-- Swap -->
+        <div class="metric-item">
+            <div class="label">Swap</div>
+            {{if .Metric.SwapTotal}}
+            <div class="value">{{fmtBytes .Metric.SwapUsed}} <span style="color:#8b949e; font-size:14px;">/ {{fmtBytes .Metric.SwapTotal}}</span></div>
+            <div class="progress-bar" style="margin-top: 8px;">
+                <div class="fill green" style="width: {{pct .Metric.SwapUsed .Metric.SwapTotal}}%"></div>
+            </div>
+            {{else}}
+            <div class="value" style="color:#8b949e;">未启用</div>
+            {{end}}
+        </div>
+        <!-- 磁盘 (总) -->
+        <div class="metric-item">
+            <div class="label">磁盘 (根分区)</div>
+            <div class="value">{{fmtBytes .Metric.DiskUsed}} <span style="color:#8b949e; font-size:14px;">/ {{fmtBytes .Metric.DiskTotal}}</span></div>
+            <div class="progress-bar" style="margin-top: 8px;">
+                <div class="fill {{if lt (pctF .Metric.DiskUsed .Metric.DiskTotal) 70.0}}green{{else if lt (pctF .Metric.DiskUsed .Metric.DiskTotal) 90.0}}yellow{{else}}red{{end}}" style="width: {{pct .Metric.DiskUsed .Metric.DiskTotal}}%"></div>
+            </div>
+            <div style="font-size:11px; color:#8b949e; margin-top:4px;">使用率: {{pct .Metric.DiskUsed .Metric.DiskTotal}}%</div>
+        </div>
+        <!-- 网络流量 -->
+        <div class="metric-item">
+            <div class="label">网络流量 (累计)</div>
+            <div class="value" style="font-size: 18px;">
+                <span style="color:#3fb950;">↓ {{fmtBytes .Metric.NetIn}}</span>
+                <span style="color:#8b949e; margin: 0 6px;">/</span>
+                <span style="color:#58a6ff;">↑ {{fmtBytes .Metric.NetOut}}</span>
+            </div>
+        </div>
+        <!-- 负载 -->
+        <div class="metric-item">
+            <div class="label">系统负载 (1/5/15分钟)</div>
+            <div class="value" style="font-size: 18px;">
+                {{printf "%.2f" .Metric.Load1}} / {{printf "%.2f" .Metric.Load5}} / {{printf "%.2f" .Metric.Load15}}
+            </div>
+        </div>
+        <!-- 运行时间 -->
+        <div class="metric-item">
+            <div class="label">运行时间</div>
+            <div class="value">{{fmtUptime .Metric.Uptime}}</div>
+        </div>
+        <!-- 进程数 -->
+        <div class="metric-item">
+            <div class="label">进程数</div>
+            <div class="value">{{.Metric.ProcessCount}}</div>
+        </div>
+    </div>
+</div>
+{{else}}
+<div class="card empty">
+    <p>暂无监控数据</p>
+    <p style="margin-top: 8px; color: #8b949e; font-size: 13px;">在目标主机上部署 Agent 后，数据将自动上报</p>
+</div>
+{{end}}
+
+<!-- 磁盘分区详情 -->
+{{if .Detail}}{{if .Detail.Disks}}
+<div class="card">
+    <div class="card-title">💾 磁盘分区</div>
+    <table>
+        <thead>
+            <tr>
+                <th>设备</th>
+                <th>挂载点</th>
+                <th>文件系统</th>
+                <th>总容量</th>
+                <th>已用</th>
+                <th>可用</th>
+                <th>使用率</th>
+                <th style="width:200px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Detail.Disks}}
+        <tr>
+            <td style="font-family:monospace; font-size:13px;">{{.Device}}</td>
+            <td style="font-family:monospace; font-size:13px;">{{.MountPoint}}</td>
+            <td><span class="badge badge-gray">{{.FSType}}</span></td>
+            <td>{{fmtBytes .Total}}</td>
+            <td>{{fmtBytes .Used}}</td>
+            <td>{{fmtBytes .Free}}</td>
+            <td style="font-weight:500; color:{{if lt (pctF .Used .Total) 70.0}}#3fb950{{else if lt (pctF .Used .Total) 90.0}}#d29922{{else}}#f85149{{end}}">{{pct .Used .Total}}%</td>
+            <td>
+                <div class="progress-bar">
+                    <div class="fill {{if lt (pctF .Used .Total) 70.0}}green{{else if lt (pctF .Used .Total) 90.0}}yellow{{else}}red{{end}}" style="width:{{pct .Used .Total}}%"></div>
+                </div>
+            </td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}{{end}}
+
+<!-- 网络接口详情 -->
+{{if .Detail}}{{if .Detail.Interfaces}}
+<div class="card">
+    <div class="card-title">🌐 网络接口</div>
+    <table>
+        <thead>
+            <tr>
+                <th>接口</th>
+                <th>IPv4 地址</th>
+                <th>接收流量</th>
+                <th>发送流量</th>
+                <th>接收包数</th>
+                <th>发送包数</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Detail.Interfaces}}
+        <tr>
+            <td style="font-family:monospace; font-weight:500;">{{.Name}}</td>
+            <td style="font-family:monospace;">{{if .IPv4}}{{.IPv4}}{{else}}<span style="color:#8b949e;">-</span>{{end}}</td>
+            <td><span style="color:#3fb950;">↓</span> {{fmtBytes .RxBytes}}</td>
+            <td><span style="color:#58a6ff;">↑</span> {{fmtBytes .TxBytes}}</td>
+            <td style="color:#8b949e;">{{.RxPkts}}</td>
+            <td style="color:#8b949e;">{{.TxPkts}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}{{end}}
+
+<!-- 进程排行 -->
+{{if .Detail}}
+{{if or .Detail.TopCPU .Detail.TopMem}}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+    {{if .Detail.TopCPU}}
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-title">🔥 CPU Top 5</div>
+        <table>
+            <thead><tr><th>PID</th><th>进程名</th><th>CPU%</th></tr></thead>
+            <tbody>
+            {{range .Detail.TopCPU}}
+            <tr>
+                <td style="font-family:monospace; color:#8b949e;">{{.PID}}</td>
+                <td style="font-weight:500;">{{.Name}}</td>
+                <td style="color:{{if lt .CPU 10.0}}#3fb950{{else if lt .CPU 50.0}}#d29922{{else}}#f85149{{end}}">{{printf "%.1f%%" .CPU}}</td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+
+    {{if .Detail.TopMem}}
+    <div class="card" style="margin-bottom:0;">
+        <div class="card-title">🧠 内存 Top 5</div>
+        <table>
+            <thead><tr><th>PID</th><th>进程名</th><th>内存</th><th>占比</th></tr></thead>
+            <tbody>
+            {{range .Detail.TopMem}}
+            <tr>
+                <td style="font-family:monospace; color:#8b949e;">{{.PID}}</td>
+                <td style="font-weight:500;">{{.Name}}</td>
+                <td>{{fmtBytes .MemRSS}}</td>
+                <td style="color:#58a6ff;">{{printf "%.1f%%" .Mem}}</td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+{{end}}
+{{end}}
+
+<!-- 服务状态 -->
+{{if .Services}}
+<div class="card">
+    <div class="card-title">⚙️ 服务状态 <span style="color:#8b949e; font-weight:400; font-size:13px;">({{len .Services}} 个)</span></div>
+    <table>
+        <thead><tr><th>名称</th><th>类型</th><th>状态</th><th>检查时间</th></tr></thead>
+        <tbody>
+        {{range .Services}}
+        <tr>
+            <td style="font-weight:500;">{{.Name}}</td>
+            <td><span class="badge badge-gray">{{.Type}}</span></td>
+            <td>
+                {{if eq .Status "running"}}<span class="badge badge-green">运行中</span>
+                {{else if eq .Status "stopped"}}<span class="badge badge-red">已停止</span>
+                {{else}}<span class="badge badge-yellow">{{.Status}}</span>{{end}}
+            </td>
+            <td style="color: #8b949e; font-size: 13px;">{{fmtTime .CheckedAt}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+<!-- 告警 -->
+{{if .Alerts}}
+<div class="card">
+    <div class="card-title">🔔 活跃告警</div>
+    {{range .Alerts}}
+    <div class="alert-row">
+        <span class="badge badge-red">{{.Type}}</span>
+        <span>{{.Message}}</span>
+        <span style="color: #8b949e; margin-left: auto; font-size: 12px;">{{fmtTime .CreatedAt}}</span>
+    </div>
+    {{end}}
+</div>
+{{end}}
+{{end}}

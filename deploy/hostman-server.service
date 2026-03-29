@@ -1,0 +1,16 @@
+[Unit]
+Description=HostMan Server - Host Management System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hostman
+ExecStart=/opt/hostman/hostman-server -addr :8080 -db /opt/hostman/data/hostman.db -templates /opt/hostman/web/templates
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

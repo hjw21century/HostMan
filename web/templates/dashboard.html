@@ -1,0 +1,77 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<h2 style="margin-bottom: 20px;">📊 仪表板</h2>
+
+<div class="stats">
+    <div class="stat-card">
+        <div class="label">主机总数</div>
+        <div class="value">{{.TotalHosts}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">在线</div>
+        <div class="value" style="color: #3fb950;">{{.OnlineHosts}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">离线</div>
+        <div class="value" style="color: #f85149;">{{.OfflineHosts}}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">即将到期 (30天内)</div>
+        <div class="value" style="color: #d29922;">{{len .ExpiringHosts}}</div>
+    </div>
+</div>
+
+{{if .ExpiringHosts}}
+<div class="card">
+    <div class="card-title">⚠️ 即将到期</div>
+    <table>
+        <thead><tr><th>名称</th><th>供应商</th><th>到期时间</th><th>剩余</th></tr></thead>
+        <tbody>
+        {{range .ExpiringHosts}}
+        <tr>
+            <td><a href="/hosts/{{.ID}}">{{.Name}}</a></td>
+            <td>{{.Provider}}</td>
+            <td>{{fmtTimePtr .ExpireAt}}</td>
+            <td><span class="badge badge-yellow">{{daysUntil .ExpireAt}}</span></td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+<div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        主机概览
+        <a href="/hosts/new" class="btn btn-primary btn-sm">+ 添加主机</a>
+    </div>
+    {{if .Hosts}}
+    <table>
+        <thead><tr><th>名称</th><th>IP</th><th>供应商</th><th>状态</th><th>CPU</th><th>内存</th><th>磁盘</th></tr></thead>
+        <tbody>
+        {{range .Hosts}}
+        <tr>
+            <td><a href="/hosts/{{.ID}}">{{.Name}}</a></td>
+            <td style="font-family: monospace; font-size: 13px;">{{.IP}}</td>
+            <td>{{.Provider}}</td>
+            <td>
+                {{if eq .Status "online"}}<span class="badge badge-green">在线</span>
+                {{else if eq .Status "offline"}}<span class="badge badge-red">离线</span>
+                {{else}}<span class="badge badge-gray">未知</span>{{end}}
+            </td>
+            {{if .LatestMetric}}
+            <td>{{fmtPct .LatestMetric.CPUPercent}}</td>
+            <td>{{fmtBytes .LatestMetric.MemUsed}} / {{fmtBytes .LatestMetric.MemTotal}}</td>
+            <td>{{fmtBytes .LatestMetric.DiskUsed}} / {{fmtBytes .LatestMetric.DiskTotal}}</td>
+            {{else}}
+            <td colspan="3" style="color: #8b949e;">暂无数据</td>
+            {{end}}
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty">还没有主机，<a href="/hosts/new">添加一台</a>吧</div>
+    {{end}}
+</div>
+{{end}}

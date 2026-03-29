@@ -1,0 +1,23 @@
+# Binaries
+bin/
+*.exe
+
+# Database
+*.db
+
+# TLS certificates
+tls/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+hostman.db*

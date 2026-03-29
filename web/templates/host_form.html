@@ -1,0 +1,76 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<h2 style="margin-bottom: 20px;">{{.Title}}</h2>
+
+<div class="card">
+    <form method="POST" action="{{if .Host.ID}}/hosts/{{.Host.ID}}{{else}}/hosts{{end}}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>名称 *</label>
+                <input type="text" name="name" value="{{.Host.Name}}" required placeholder="例如：生产服务器-01">
+            </div>
+            <div class="form-group">
+                <label>IP 地址</label>
+                <input type="text" name="ip" value="{{.Host.IP}}" placeholder="例如：1.2.3.4">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>供应商</label>
+                <input type="text" name="provider" value="{{.Host.Provider}}" placeholder="例如：Vultr, RackNerd, AWS">
+            </div>
+            <div class="form-group">
+                <label>套餐</label>
+                <input type="text" name="plan" value="{{.Host.Plan}}" placeholder="例如：2C4G, 4C8G">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>费用</label>
+                <input type="number" name="cost" value="{{.Host.Cost}}" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="form-group">
+                <label>货币</label>
+                <select name="currency">
+                    <option value="USD" {{if eq .Host.Currency "USD"}}selected{{end}}>USD</option>
+                    <option value="CNY" {{if eq .Host.Currency "CNY"}}selected{{end}}>CNY</option>
+                    <option value="EUR" {{if eq .Host.Currency "EUR"}}selected{{end}}>EUR</option>
+                    <option value="GBP" {{if eq .Host.Currency "GBP"}}selected{{end}}>GBP</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>计费周期</label>
+                <select name="billing_cycle">
+                    <option value="monthly" {{if eq .Host.BillingCycle "monthly"}}selected{{end}}>月付</option>
+                    <option value="quarterly" {{if eq .Host.BillingCycle "quarterly"}}selected{{end}}>季付</option>
+                    <option value="yearly" {{if eq .Host.BillingCycle "yearly"}}selected{{end}}>年付</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>订阅日期</label>
+                <input type="date" name="subscribe_at" value="{{fmtDate .Host.SubscribeAt}}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>到期日期</label>
+            <input type="date" name="expire_at" value="{{fmtDate .Host.ExpireAt}}">
+        </div>
+
+        <div class="form-group">
+            <label>备注</label>
+            <textarea name="note" rows="3" placeholder="任何额外信息...">{{.Host.Note}}</textarea>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="{{if .Host.ID}}/hosts/{{.Host.ID}}{{else}}/hosts{{end}}" class="btn">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

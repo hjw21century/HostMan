@@ -1,0 +1,61 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>🖥️ 主机列表</h2>
+    <a href="/hosts/new" class="btn btn-primary">+ 添加主机</a>
+</div>
+
+{{if .Hosts}}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>名称</th>
+                <th>IP</th>
+                <th>供应商</th>
+                <th>套餐</th>
+                <th>费用</th>
+                <th>到期</th>
+                <th>状态</th>
+                <th>CPU</th>
+                <th>内存</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Hosts}}
+        <tr>
+            <td><a href="/hosts/{{.ID}}">{{.Name}}</a></td>
+            <td style="font-family: monospace; font-size: 13px;">{{.IP}}</td>
+            <td>{{.Provider}}</td>
+            <td>{{.Plan}}</td>
+            <td>{{fmtCost .Cost .Currency}}/{{.BillingCycle}}</td>
+            <td>
+                {{if .ExpireAt}}
+                    <span class="badge {{if lt (len (daysUntil .ExpireAt)) 5}}badge-yellow{{else}}badge-gray{{end}}">
+                        {{daysUntil .ExpireAt}}
+                    </span>
+                {{else}}-{{end}}
+            </td>
+            <td>
+                {{if eq .Status "online"}}<span class="badge badge-green">在线</span>
+                {{else if eq .Status "offline"}}<span class="badge badge-red">离线</span>
+                {{else}}<span class="badge badge-gray">未知</span>{{end}}
+            </td>
+            {{if .LatestMetric}}
+            <td>{{fmtPct .LatestMetric.CPUPercent}}</td>
+            <td>{{fmtBytes .LatestMetric.MemUsed}} / {{fmtBytes .LatestMetric.MemTotal}}</td>
+            {{else}}
+            <td colspan="2" style="color: #8b949e;">-</td>
+            {{end}}
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="card empty">
+    <p>还没有添加主机</p>
+    <p style="margin-top: 8px;"><a href="/hosts/new" class="btn btn-primary">添加第一台主机</a></p>
+</div>
+{{end}}
+{{end}}
