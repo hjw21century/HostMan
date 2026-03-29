@@ -1,0 +1,37 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<h2 style="margin-bottom: 20px;">🔔 告警记录</h2>
+
+{{if .Alerts}}
+<div class="card">
+    <table>
+        <thead><tr><th>主机</th><th>类型</th><th>内容</th><th>状态</th><th>时间</th></tr></thead>
+        <tbody>
+        {{range .Alerts}}
+        <tr>
+            <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
+            <td>
+                {{if eq .Alert.Type "cpu"}}<span class="badge badge-red">CPU</span>
+                {{else if eq .Alert.Type "mem"}}<span class="badge badge-red">内存</span>
+                {{else if eq .Alert.Type "disk"}}<span class="badge badge-yellow">磁盘</span>
+                {{else if eq .Alert.Type "offline"}}<span class="badge badge-red">离线</span>
+                {{else if eq .Alert.Type "expire"}}<span class="badge badge-yellow">到期</span>
+                {{else}}<span class="badge badge-gray">{{.Alert.Type}}</span>{{end}}
+            </td>
+            <td>{{.Alert.Message}}</td>
+            <td>
+                {{if .Alert.Resolved}}<span class="badge badge-green">已恢复</span>
+                {{else}}<span class="badge badge-red">活跃</span>{{end}}
+            </td>
+            <td style="color:#8b949e; font-size:13px; white-space:nowrap;">{{fmtTime .Alert.CreatedAt}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="card empty">
+    <p>暂无告警记录 🎉</p>
+</div>
+{{end}}
+{{end}}

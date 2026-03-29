@@ -105,7 +105,7 @@ func New(db *store.DB, sessions *middleware.SessionStore, tmplDir string) (*Hand
 	_ = tmpl // validate parse
 
 	// Build per-page templates to avoid {{define "content"}} collisions
-	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html", "change_password.html"}
+	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html", "change_password.html", "alerts.html"}
 	layoutFile := tmplDir + "/layout.html"
 	tmpls := make(map[string]*template.Template, len(pages)+1)
 	for _, page := range pages {
@@ -156,6 +156,8 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		auth.GET("/settings/password", h.ChangePasswordPage)
 		auth.POST("/settings/password", h.ChangePassword)
 		auth.GET("/export/hosts", h.ExportHosts)
+		auth.GET("/api/metrics/:id", h.APIMetricsHistory)
+		auth.GET("/alerts", h.AlertsList)
 	}
 }
 
@@ -361,6 +363,65 @@ func (h *Handler) GenAPIKey(c *gin.Context) {
 	key := generateKey()
 	h.DB.SetHostAPIKey(id, key)
 	c.Redirect(302, fmt.Sprintf("/hosts/%d", id))
+}
+
+func (h *Handler) APIMetricsHistory(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	hours := 24
+	if h := c.Query("hours"); h != "" {
+		if v, err := strconv.Atoi(h); err == nil && v > 0 && v <= 168 {
+			hours = v
+		}
+	}
+	metrics, err := h.DB.RecentMetrics(id, time.Duration(hours)*time.Hour)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	// Format for Chart.js
+	type point struct {
+		Time string  `json:"t"`
+		Val  float64 `json:"v"`
+	}
+	cpuData := make([]point, len(metrics))
+	memData := make([]point, len(metrics))
+	diskData := make([]point, len(metrics))
+	loadData := make([]point, len(metrics))
+	netInData := make([]point, len(metrics))
+	netOutData := make([]point, len(metrics))
+	for i, m := range metrics {
+		ts := m.CollectedAt.Format("15:04")
+		cpuData[i] = point{ts, m.CPUPercent}
+		if m.MemTotal > 0 {
+			memData[i] = point{ts, float64(m.MemUsed) / float64(m.MemTotal) * 100}
+		}
+		if m.DiskTotal > 0 {
+			diskData[i] = point{ts, float64(m.DiskUsed) / float64(m.DiskTotal) * 100}
+		}
+		loadData[i] = point{ts, m.Load1}
+		netInData[i] = point{ts, float64(m.NetIn) / 1024 / 1024}
+		netOutData[i] = point{ts, float64(m.NetOut) / 1024 / 1024}
+	}
+	c.JSON(200, gin.H{
+		"cpu": cpuData, "mem": memData, "disk": diskData,
+		"load": loadData, "net_in": netInData, "net_out": netOutData,
+	})
+}
+
+func (h *Handler) AlertsList(c *gin.Context) {
+	hosts, _ := h.DB.ListHosts()
+	var allAlerts []gin.H
+	for _, host := range hosts {
+		alerts, _ := h.DB.ListAlerts(host.ID, false)
+		for _, a := range alerts {
+			allAlerts = append(allAlerts, gin.H{
+				"Alert":    a,
+				"HostName": host.Name,
+				"HostID":   host.ID,
+			})
+		}
+	}
+	h.render(c, "alerts.html", gin.H{"Title": "告警记录", "Alerts": allAlerts})
 }
 
 func (h *Handler) ExportHosts(c *gin.Context) {

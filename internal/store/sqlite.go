@@ -394,6 +394,12 @@ func (db *DB) ListServices(hostID int64) ([]model.Service, error) {
 // ---------- Alerts ----------
 
 func (db *DB) CreateAlert(a *model.Alert) error {
+	// Skip if there's already an active alert of the same type for this host
+	var count int
+	db.conn.QueryRow(`SELECT COUNT(*) FROM alerts WHERE host_id=? AND type=? AND resolved=0`, a.HostID, a.Type).Scan(&count)
+	if count > 0 {
+		return nil // already has active alert
+	}
 	res, err := db.conn.Exec(`
 		INSERT INTO alerts (host_id, type, message) VALUES (?, ?, ?)`,
 		a.HostID, a.Type, a.Message,
@@ -403,6 +409,11 @@ func (db *DB) CreateAlert(a *model.Alert) error {
 	}
 	a.ID, _ = res.LastInsertId()
 	return nil
+}
+
+// AutoResolveAlerts resolves alerts when the condition is no longer met.
+func (db *DB) AutoResolveAlerts(hostID int64, alertType string) {
+	db.conn.Exec(`UPDATE alerts SET resolved=1 WHERE host_id=? AND type=? AND resolved=0`, hostID, alertType)
 }
 
 func (db *DB) ResolveAlert(id int64) error {

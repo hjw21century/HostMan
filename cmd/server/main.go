@@ -11,6 +11,7 @@ import (
 
 	"hostman/internal/handler"
 	"hostman/internal/middleware"
+	"hostman/internal/model"
 	"hostman/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -107,6 +108,7 @@ func main() {
 	// Start background tasks
 	go offlineChecker(db, *offlineTimeout)
 	go metricPurger(db, *purgeAge)
+	go alertChecker(db)
 
 	// Setup router
 	r := gin.Default()
@@ -163,6 +165,65 @@ func metricPurger(db *store.DB, maxAge time.Duration) {
 			log.Printf("purge error: %v", err)
 		} else if n > 0 {
 			log.Printf("🗑️  Purged %d old metric(s)", n)
+		}
+	}
+}
+
+// alertChecker periodically checks resource thresholds and expiry dates.
+func alertChecker(db *store.DB) {
+	const (
+		cpuThreshold  = 90.0
+		memThreshold  = 90.0
+		diskThreshold = 90.0
+		expireDays    = 7
+	)
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		hosts, err := db.ListHosts()
+		if err != nil {
+			continue
+		}
+		for _, h := range hosts {
+			// Check resource thresholds
+			m, err := db.LatestMetric(h.ID)
+			if err == nil && m != nil {
+				// CPU
+				if m.CPUPercent > cpuThreshold {
+					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "cpu", Message: fmt.Sprintf("CPU 使用率 %.1f%% 超过阈值 %.0f%%", m.CPUPercent, cpuThreshold)})
+				} else {
+					db.AutoResolveAlerts(h.ID, "cpu")
+				}
+				// Memory
+				if m.MemTotal > 0 {
+					memPct := float64(m.MemUsed) / float64(m.MemTotal) * 100
+					if memPct > memThreshold {
+						db.CreateAlert(&model.Alert{HostID: h.ID, Type: "mem", Message: fmt.Sprintf("内存使用率 %.1f%% 超过阈值 %.0f%%", memPct, memThreshold)})
+					} else {
+						db.AutoResolveAlerts(h.ID, "mem")
+					}
+				}
+				// Disk
+				if m.DiskTotal > 0 {
+					diskPct := float64(m.DiskUsed) / float64(m.DiskTotal) * 100
+					if diskPct > diskThreshold {
+						db.CreateAlert(&model.Alert{HostID: h.ID, Type: "disk", Message: fmt.Sprintf("磁盘使用率 %.1f%% 超过阈值 %.0f%%", diskPct, diskThreshold)})
+					} else {
+						db.AutoResolveAlerts(h.ID, "disk")
+					}
+				}
+			}
+			// Check expiry
+			if h.ExpireAt != nil {
+				daysLeft := int(time.Until(*h.ExpireAt).Hours() / 24)
+				if daysLeft <= expireDays && daysLeft >= 0 {
+					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅将在 %d 天后到期", daysLeft)})
+				} else if daysLeft < 0 {
+					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅已过期 %d 天", -daysLeft)})
+				} else {
+					db.AutoResolveAlerts(h.ID, "expire")
+				}
+			}
 		}
 	}
 }

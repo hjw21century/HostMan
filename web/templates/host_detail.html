@@ -143,6 +143,66 @@
 </div>
 {{end}}
 
+<!-- 历史趋势图表 -->
+{{if .Metric}}
+<div class="card">
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        📈 资源趋势 (24小时)
+        <select id="chartRange" onchange="loadCharts()" class="btn btn-sm" style="padding:4px 10px;">
+            <option value="6">6小时</option>
+            <option value="24" selected>24小时</option>
+            <option value="72">3天</option>
+            <option value="168">7天</option>
+        </select>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div><canvas id="cpuChart" height="160"></canvas></div>
+        <div><canvas id="memChart" height="160"></canvas></div>
+        <div><canvas id="diskChart" height="160"></canvas></div>
+        <div><canvas id="loadChart" height="160"></canvas></div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const hostId = {{.Host.ID}};
+let charts = {};
+function makeChart(id, label, color, unit) {
+    const ctx = document.getElementById(id).getContext('2d');
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: label, data: [], borderColor: color, backgroundColor: color+'22', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }] },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: '#8b949e' } } },
+            scales: {
+                x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: '#21262d' } },
+                y: { ticks: { color: '#8b949e', callback: v => v + unit }, grid: { color: '#21262d' }, beginAtZero: true }
+            }
+        }
+    });
+    return charts[id];
+}
+function loadCharts() {
+    const hours = document.getElementById('chartRange').value;
+    fetch('/api/metrics/' + hostId + '?hours=' + hours)
+        .then(r => r.json())
+        .then(d => {
+            function update(chart, data) {
+                chart.data.labels = data.map(p => p.t);
+                chart.data.datasets[0].data = data.map(p => p.v);
+                chart.update();
+            }
+            update(makeChart('cpuChart', 'CPU %', '#f85149', '%'), d.cpu || []);
+            update(makeChart('memChart', '内存 %', '#58a6ff', '%'), d.mem || []);
+            update(makeChart('diskChart', '磁盘 %', '#d29922', '%'), d.disk || []);
+            update(makeChart('loadChart', '负载', '#3fb950', ''), d.load || []);
+        });
+}
+loadCharts();
+</script>
+{{end}}
+
 <!-- 磁盘分区详情 -->
 {{if .Detail}}{{if .Detail.Disks}}
 <div class="card">
