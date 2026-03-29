@@ -488,13 +488,13 @@ func (db *DB) UpdateHostInfo(id int64, info *model.HostInfo) error {
 
 // UpdateLastSeen updates the last_seen_at timestamp for a host.
 func (db *DB) UpdateLastSeen(id int64) error {
-	_, err := db.conn.Exec(`UPDATE hosts SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, id)
+	_, err := db.conn.Exec(`UPDATE hosts SET last_seen_at=? WHERE id=?`, time.Now().UTC(), id)
 	return err
 }
 
 // MarkOfflineHosts marks hosts as offline if they haven't reported within the timeout.
 func (db *DB) MarkOfflineHosts(timeout time.Duration) (int64, error) {
-	cutoff := time.Now().Add(-timeout)
+	cutoff := time.Now().UTC().Add(-timeout)
 	res, err := db.conn.Exec(`
 		UPDATE hosts SET status='offline'
 		WHERE status='online' AND last_seen_at IS NOT NULL AND last_seen_at < ?`, cutoff)
