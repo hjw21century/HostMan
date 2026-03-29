@@ -22,6 +22,16 @@
     </div>
 </div>
 
+{{if .APIKey}}
+<div class="card" style="margin-bottom: 16px; padding: 14px 20px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="color: #8b949e; font-size: 13px; white-space: nowrap;">🔑 API Key:</span>
+        <code id="apikey" style="flex:1; background: #0d1117; padding: 8px 12px; border-radius: 6px; border: 1px solid #30363d; font-size: 13px; word-break: break-all; user-select: all;">{{.APIKey}}</code>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('apikey').textContent).then(()=>{this.textContent='✅ 已复制';setTimeout(()=>{this.textContent='📋 复制'},1500)})" class="btn btn-sm" style="white-space:nowrap;">📋 复制</button>
+    </div>
+</div>
+{{end}}
+
 <!-- 系统信息 + 订阅信息 -->
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
     {{if .HostInfo}}{{if .HostInfo.Hostname}}

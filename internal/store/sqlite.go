@@ -466,6 +466,13 @@ func (db *DB) SetHostAPIKey(id int64, key string) error {
 	return err
 }
 
+// GetHostAPIKey returns the API key for a host.
+func (db *DB) GetHostAPIKey(id int64) string {
+	var key string
+	db.conn.QueryRow(`SELECT api_key FROM hosts WHERE id=?`, id).Scan(&key)
+	return key
+}
+
 // UpdateHostInfo stores static host information from the agent.
 func (db *DB) UpdateHostInfo(id int64, info *model.HostInfo) error {
 	if info == nil {

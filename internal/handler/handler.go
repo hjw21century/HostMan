@@ -248,6 +248,7 @@ func (h *Handler) HostDetail(c *gin.Context) {
 	alerts, _ := h.DB.ListAlerts(id, true)
 	hostInfo, _ := h.DB.GetHostInfo(id)
 	detail, _ := h.DB.GetLatestDetail(id)
+	apiKey := h.DB.GetHostAPIKey(id)
 
 	h.render(c, "host_detail.html", gin.H{
 		"Title":    host.Name,
@@ -258,6 +259,7 @@ func (h *Handler) HostDetail(c *gin.Context) {
 		"Alerts":   alerts,
 		"HostInfo": hostInfo,
 		"Detail":   detail,
+		"APIKey":   apiKey,
 	})
 }
 
