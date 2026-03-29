@@ -104,6 +104,10 @@ func (db *DB) migrate() error {
 		// Migrations for existing databases
 		`CREATE INDEX IF NOT EXISTS idx_hosts_api_key ON hosts(api_key)`,
 		`CREATE INDEX IF NOT EXISTS idx_hosts_status ON hosts(status)`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL DEFAULT ''
+		)`,
 	}
 	// Safe column additions for existing databases
 	alterStmts := []string{
@@ -571,4 +575,33 @@ func (db *DB) GetHostInfo(id int64) (*model.HostInfo, error) {
 		return nil, err
 	}
 	return info, nil
+}
+
+// ---------- Settings ----------
+
+func (db *DB) GetSetting(key string) string {
+	var val string
+	db.conn.QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&val)
+	return val
+}
+
+func (db *DB) SetSetting(key, value string) error {
+	_, err := db.conn.Exec(`INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+	return err
+}
+
+func (db *DB) GetSettings(keys []string) map[string]string {
+	m := make(map[string]string)
+	for _, k := range keys {
+		m[k] = db.GetSetting(k)
+	}
+	return m
+}
+
+// CountActiveAlerts returns the number of unresolved alerts.
+func (db *DB) CountActiveAlerts() int {
+	var n int
+	db.conn.QueryRow(`SELECT COUNT(*) FROM alerts WHERE resolved=0`).Scan(&n)
+	return n
 }

@@ -1,0 +1,61 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<h2 style="margin-bottom: 20px;">⚙️ 系统设置</h2>
+
+{{if .Msg}}
+<div style="background:{{if .OK}}#0d3b22; color:#3fb950; border:1px solid #3fb95066{{else}}#3d1215; color:#f85149; border:1px solid #f8514966{{end}}; border-radius:6px; padding:10px 14px; margin-bottom:20px; font-size:14px;">
+    {{.Msg}}
+</div>
+{{end}}
+
+<form method="POST" action="/settings">
+
+<div class="card">
+    <div class="card-title">📱 Telegram 通知</div>
+    <p style="color:#8b949e; font-size:13px; margin-bottom:16px;">配置后，告警将自动推送到 Telegram。通过 <a href="https://t.me/BotFather" target="_blank">@BotFather</a> 创建 Bot 获取 Token。</p>
+    <div class="form-group">
+        <label>Bot Token</label>
+        <input type="text" name="tg_bot_token" value="{{.S.tg_bot_token}}" placeholder="123456:ABC-DEF..." style="font-family:monospace;">
+    </div>
+    <div class="form-group">
+        <label>Chat ID</label>
+        <input type="text" name="tg_chat_id" value="{{.S.tg_chat_id}}" placeholder="你的 Telegram 用户 ID">
+    </div>
+    <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" name="tg_enabled" value="1" {{if eq (index .S "tg_enabled") "1"}}checked{{end}}>
+            启用 Telegram 通知
+        </label>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">🔔 告警阈值</div>
+    <p style="color:#8b949e; font-size:13px; margin-bottom:16px;">资源使用率超过阈值时触发告警（百分比）</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+        <div class="form-group">
+            <label>CPU 阈值 (%)</label>
+            <input type="number" name="alert_cpu" value="{{or (index .S "alert_cpu") "90"}}" min="50" max="100">
+        </div>
+        <div class="form-group">
+            <label>内存阈值 (%)</label>
+            <input type="number" name="alert_mem" value="{{or (index .S "alert_mem") "90"}}" min="50" max="100">
+        </div>
+        <div class="form-group">
+            <label>磁盘阈值 (%)</label>
+            <input type="number" name="alert_disk" value="{{or (index .S "alert_disk") "90"}}" min="50" max="100">
+        </div>
+    </div>
+    <div class="form-group" style="max-width:200px;">
+        <label>到期提醒 (天)</label>
+        <input type="number" name="alert_expire_days" value="{{or (index .S "alert_expire_days") "7"}}" min="1" max="90">
+    </div>
+</div>
+
+<div class="actions">
+    <button type="submit" class="btn btn-primary">保存设置</button>
+    <a href="/settings/test-telegram" class="btn" onclick="return confirm('发送测试消息到 Telegram？')">📤 测试 Telegram</a>
+</div>
+
+</form>
+{{end}}

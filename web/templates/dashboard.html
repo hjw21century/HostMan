@@ -23,6 +23,12 @@
         <div class="label">月均费用</div>
         <div class="value" style="font-size:22px;">$ {{printf "%.2f" .MonthlyCost}}</div>
     </div>
+    <div class="stat-card">
+        <div class="label">活跃告警</div>
+        <div class="value" style="color: {{if gt .ActiveAlerts 0}}#f85149{{else}}#3fb950{{end}};">
+            {{if gt .ActiveAlerts 0}}<a href="/alerts" style="color:inherit;">{{.ActiveAlerts}}</a>{{else}}0{{end}}
+        </div>
+    </div>
 </div>
 
 {{if .ExpiringHosts}}

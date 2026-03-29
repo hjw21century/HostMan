@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hostman/internal/middleware"
+	"hostman/internal/notify"
 	"hostman/internal/model"
 	"hostman/internal/store"
 
@@ -105,7 +106,7 @@ func New(db *store.DB, sessions *middleware.SessionStore, tmplDir string) (*Hand
 	_ = tmpl // validate parse
 
 	// Build per-page templates to avoid {{define "content"}} collisions
-	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html", "change_password.html", "alerts.html"}
+	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html", "change_password.html", "alerts.html", "settings.html"}
 	layoutFile := tmplDir + "/layout.html"
 	tmpls := make(map[string]*template.Template, len(pages)+1)
 	for _, page := range pages {
@@ -158,6 +159,9 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		auth.GET("/export/hosts", h.ExportHosts)
 		auth.GET("/api/metrics/:id", h.APIMetricsHistory)
 		auth.GET("/alerts", h.AlertsList)
+		auth.GET("/settings", h.SettingsPage)
+		auth.POST("/settings", h.SaveSettings)
+		auth.GET("/settings/test-telegram", h.TestTelegram)
 	}
 }
 
@@ -269,6 +273,7 @@ func (h *Handler) Dashboard(c *gin.Context) {
 		"OfflineHosts":  countByStatus(hosts, "offline"),
 		"ExpiringHosts": expiring,
 		"MonthlyCost":   monthlyCost,
+		"ActiveAlerts":  h.DB.CountActiveAlerts(),
 	}
 	h.render(c, "dashboard.html", data)
 }
@@ -422,6 +427,39 @@ func (h *Handler) AlertsList(c *gin.Context) {
 		}
 	}
 	h.render(c, "alerts.html", gin.H{"Title": "告警记录", "Alerts": allAlerts})
+}
+
+var settingKeys = []string{"tg_bot_token", "tg_chat_id", "tg_enabled", "alert_cpu", "alert_mem", "alert_disk", "alert_expire_days"}
+
+func (h *Handler) SettingsPage(c *gin.Context) {
+	s := h.DB.GetSettings(settingKeys)
+	h.render(c, "settings.html", gin.H{"Title": "系统设置", "S": s})
+}
+
+func (h *Handler) SaveSettings(c *gin.Context) {
+	for _, k := range settingKeys {
+		val := c.PostForm(k)
+		h.DB.SetSetting(k, val)
+	}
+	s := h.DB.GetSettings(settingKeys)
+	h.render(c, "settings.html", gin.H{"Title": "系统设置", "S": s, "Msg": "设置已保存", "OK": true})
+}
+
+func (h *Handler) TestTelegram(c *gin.Context) {
+	token := h.DB.GetSetting("tg_bot_token")
+	chatID := h.DB.GetSetting("tg_chat_id")
+	if token == "" || chatID == "" {
+		s := h.DB.GetSettings(settingKeys)
+		h.render(c, "settings.html", gin.H{"Title": "系统设置", "S": s, "Msg": "请先配置 Bot Token 和 Chat ID"})
+		return
+	}
+	err := notify.SendTelegram(token, chatID, "🧪 <b>HostMan 测试消息</b>\n\n✅ Telegram 通知配置正常！")
+	s := h.DB.GetSettings(settingKeys)
+	if err != nil {
+		h.render(c, "settings.html", gin.H{"Title": "系统设置", "S": s, "Msg": "发送失败: " + err.Error()})
+	} else {
+		h.render(c, "settings.html", gin.H{"Title": "系统设置", "S": s, "Msg": "测试消息已发送，请检查 Telegram", "OK": true})
+	}
 }
 
 func (h *Handler) ExportHosts(c *gin.Context) {

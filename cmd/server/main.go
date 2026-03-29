@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"hostman/internal/handler"
 	"hostman/internal/middleware"
 	"hostman/internal/model"
+	"hostman/internal/notify"
 	"hostman/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -171,15 +173,20 @@ func metricPurger(db *store.DB, maxAge time.Duration) {
 
 // alertChecker periodically checks resource thresholds and expiry dates.
 func alertChecker(db *store.DB) {
-	const (
-		cpuThreshold  = 90.0
-		memThreshold  = 90.0
-		diskThreshold = 90.0
-		expireDays    = 7
-	)
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
+		// Read thresholds from settings (with defaults)
+		cpuThreshold := parseFloat(db.GetSetting("alert_cpu"), 90)
+		memThreshold := parseFloat(db.GetSetting("alert_mem"), 90)
+		diskThreshold := parseFloat(db.GetSetting("alert_disk"), 90)
+		expireDays := parseInt(db.GetSetting("alert_expire_days"), 7)
+
+		// Telegram config
+		tgEnabled := db.GetSetting("tg_enabled") == "1"
+		tgToken := db.GetSetting("tg_bot_token")
+		tgChatID := db.GetSetting("tg_chat_id")
+
 		hosts, err := db.ListHosts()
 		if err != nil {
 			continue
@@ -190,7 +197,10 @@ func alertChecker(db *store.DB) {
 			if err == nil && m != nil {
 				// CPU
 				if m.CPUPercent > cpuThreshold {
-					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "cpu", Message: fmt.Sprintf("CPU 使用率 %.1f%% 超过阈值 %.0f%%", m.CPUPercent, cpuThreshold)})
+					a := &model.Alert{HostID: h.ID, Type: "cpu", Message: fmt.Sprintf("CPU 使用率 %.1f%% 超过阈值 %.0f%%", m.CPUPercent, cpuThreshold)}
+					if err := db.CreateAlert(a); err == nil && a.ID > 0 && tgEnabled {
+						notify.SendTelegram(tgToken, tgChatID, notify.FormatAlert(h.Name, "CPU", a.Message))
+					}
 				} else {
 					db.AutoResolveAlerts(h.ID, "cpu")
 				}
@@ -198,7 +208,10 @@ func alertChecker(db *store.DB) {
 				if m.MemTotal > 0 {
 					memPct := float64(m.MemUsed) / float64(m.MemTotal) * 100
 					if memPct > memThreshold {
-						db.CreateAlert(&model.Alert{HostID: h.ID, Type: "mem", Message: fmt.Sprintf("内存使用率 %.1f%% 超过阈值 %.0f%%", memPct, memThreshold)})
+						a := &model.Alert{HostID: h.ID, Type: "mem", Message: fmt.Sprintf("内存使用率 %.1f%% 超过阈值 %.0f%%", memPct, memThreshold)}
+						if err := db.CreateAlert(a); err == nil && a.ID > 0 && tgEnabled {
+							notify.SendTelegram(tgToken, tgChatID, notify.FormatAlert(h.Name, "内存", a.Message))
+						}
 					} else {
 						db.AutoResolveAlerts(h.ID, "mem")
 					}
@@ -207,7 +220,10 @@ func alertChecker(db *store.DB) {
 				if m.DiskTotal > 0 {
 					diskPct := float64(m.DiskUsed) / float64(m.DiskTotal) * 100
 					if diskPct > diskThreshold {
-						db.CreateAlert(&model.Alert{HostID: h.ID, Type: "disk", Message: fmt.Sprintf("磁盘使用率 %.1f%% 超过阈值 %.0f%%", diskPct, diskThreshold)})
+						a := &model.Alert{HostID: h.ID, Type: "disk", Message: fmt.Sprintf("磁盘使用率 %.1f%% 超过阈值 %.0f%%", diskPct, diskThreshold)}
+						if err := db.CreateAlert(a); err == nil && a.ID > 0 && tgEnabled {
+							notify.SendTelegram(tgToken, tgChatID, notify.FormatAlert(h.Name, "磁盘", a.Message))
+						}
 					} else {
 						db.AutoResolveAlerts(h.ID, "disk")
 					}
@@ -217,13 +233,41 @@ func alertChecker(db *store.DB) {
 			if h.ExpireAt != nil {
 				daysLeft := int(time.Until(*h.ExpireAt).Hours() / 24)
 				if daysLeft <= expireDays && daysLeft >= 0 {
-					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅将在 %d 天后到期", daysLeft)})
+					a := &model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅将在 %d 天后到期", daysLeft)}
+					if err := db.CreateAlert(a); err == nil && a.ID > 0 && tgEnabled {
+						notify.SendTelegram(tgToken, tgChatID, notify.FormatAlert(h.Name, "到期", a.Message))
+					}
 				} else if daysLeft < 0 {
-					db.CreateAlert(&model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅已过期 %d 天", -daysLeft)})
+					a := &model.Alert{HostID: h.ID, Type: "expire", Message: fmt.Sprintf("订阅已过期 %d 天", -daysLeft)}
+					if err := db.CreateAlert(a); err == nil && a.ID > 0 && tgEnabled {
+						notify.SendTelegram(tgToken, tgChatID, notify.FormatAlert(h.Name, "到期", a.Message))
+					}
 				} else {
 					db.AutoResolveAlerts(h.ID, "expire")
 				}
 			}
 		}
 	}
+}
+
+func parseFloat(s string, def float64) float64 {
+	if s == "" {
+		return def
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func parseInt(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return v
 }
