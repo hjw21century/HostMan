@@ -98,7 +98,7 @@ func New(db *store.DB, sessions *middleware.SessionStore, tmplDir string) (*Hand
 	_ = tmpl // validate parse
 
 	// Build per-page templates to avoid {{define "content"}} collisions
-	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html"}
+	pages := []string{"dashboard.html", "hosts.html", "host_form.html", "host_detail.html", "change_password.html"}
 	layoutFile := tmplDir + "/layout.html"
 	tmpls := make(map[string]*template.Template, len(pages)+1)
 	for _, page := range pages {
@@ -146,6 +146,8 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		auth.POST("/hosts/:id", h.UpdateHost)
 		auth.POST("/hosts/:id/delete", h.DeleteHost)
 		auth.POST("/hosts/:id/genkey", h.GenAPIKey)
+		auth.GET("/settings/password", h.ChangePasswordPage)
+		auth.POST("/settings/password", h.ChangePassword)
 	}
 }
 
@@ -185,6 +187,42 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 	c.SetCookie(middleware.CookieName, "", -1, "/", "", false, true)
 	c.Redirect(302, "/login")
+}
+
+func (h *Handler) ChangePasswordPage(c *gin.Context) {
+	h.render(c, "change_password.html", gin.H{"Title": "修改密码"})
+}
+
+func (h *Handler) ChangePassword(c *gin.Context) {
+	sess, _ := c.Get("session")
+	session := sess.(*middleware.Session)
+
+	oldPass := c.PostForm("old_password")
+	newPass := c.PostForm("new_password")
+	confirmPass := c.PostForm("confirm_password")
+
+	if newPass != confirmPass {
+		h.render(c, "change_password.html", gin.H{"Title": "修改密码", "Msg": "两次输入的新密码不一致"})
+		return
+	}
+	if len(newPass) < 6 {
+		h.render(c, "change_password.html", gin.H{"Title": "修改密码", "Msg": "新密码长度不能少于6位"})
+		return
+	}
+
+	// Verify old password
+	if _, err := h.DB.AuthenticateUser(session.Username, oldPass); err != nil {
+		h.render(c, "change_password.html", gin.H{"Title": "修改密码", "Msg": "当前密码错误"})
+		return
+	}
+
+	// Update password
+	if err := h.DB.ChangePassword(session.UserID, newPass); err != nil {
+		h.render(c, "change_password.html", gin.H{"Title": "修改密码", "Msg": "修改失败: " + err.Error()})
+		return
+	}
+
+	h.render(c, "change_password.html", gin.H{"Title": "修改密码", "Msg": "密码修改成功！", "OK": true})
 }
 
 // ---------- Web Pages ----------

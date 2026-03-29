@@ -74,6 +74,10 @@
         <div class="nav-brand">🖥️ <span>HostMan</span></div>
         <a href="/">仪表板</a>
         <a href="/hosts">主机</a>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 16px;">
+            <a href="/settings/password" style="font-size:13px;">🔒 修改密码</a>
+            <a href="/logout" style="font-size:13px;">退出</a>
+        </div>
     </nav>
     <div class="container">
         {{template "content" .}}
