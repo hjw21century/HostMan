@@ -11,6 +11,19 @@
 <form method="POST" action="/settings">
 
 <div class="card">
+    <div class="card-title">🔑 API Token (CLI 访问)</div>
+    <p style="color:#8b949e; font-size:13px; margin-bottom:16px;">CLI 工具使用此 Token 认证。生成后请妥善保管。</p>
+    <div class="form-group">
+        <label>API Token</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" name="admin_api_token" value="{{.S.admin_api_token}}" placeholder="点击右边按钮生成" style="font-family:monospace;" readonly id="apiToken">
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('apiToken').value=crypto.randomUUID().replace(/-/g,'');document.getElementById('apiToken').removeAttribute('readonly');">🔄 生成</button>
+            <button type="button" class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('apiToken').value)">📋 复制</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
     <div class="card-title">📱 Telegram 通知</div>
     <p style="color:#8b949e; font-size:13px; margin-bottom:16px;">配置后，告警将自动推送到 Telegram。通过 <a href="https://t.me/BotFather" target="_blank">@BotFather</a> 创建 Bot 获取 Token。</p>
     <div class="form-group">

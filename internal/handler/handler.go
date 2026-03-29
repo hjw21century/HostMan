@@ -142,6 +142,16 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		api.GET("/hosts/:id", h.APIGetHost)
 	}
 
+	// Admin API (token auth for CLI)
+	admin := r.Group("/api/v1/admin", h.adminTokenAuth())
+	{
+		admin.GET("/status", h.AdminStatus)
+		admin.GET("/hosts", h.AdminListHosts)
+		admin.GET("/hosts/:id", h.AdminGetHost)
+		admin.GET("/alerts", h.AdminAlerts)
+		admin.GET("/export", h.AdminExport)
+	}
+
 	// Protected web routes (require login)
 	auth := r.Group("/", middleware.AuthRequired(h.Sessions))
 	{
@@ -429,7 +439,7 @@ func (h *Handler) AlertsList(c *gin.Context) {
 	h.render(c, "alerts.html", gin.H{"Title": "告警记录", "Alerts": allAlerts})
 }
 
-var settingKeys = []string{"tg_bot_token", "tg_chat_id", "tg_enabled", "alert_cpu", "alert_mem", "alert_disk", "alert_expire_days"}
+var settingKeys = []string{"tg_bot_token", "tg_chat_id", "tg_enabled", "alert_cpu", "alert_mem", "alert_disk", "alert_expire_days", "admin_api_token"}
 
 func (h *Handler) SettingsPage(c *gin.Context) {
 	s := h.DB.GetSettings(settingKeys)
@@ -564,6 +574,150 @@ func (h *Handler) APIGetHost(c *gin.Context) {
 	}
 	metric, _ := h.DB.LatestMetric(id)
 	c.JSON(200, gin.H{"host": host, "metric": metric})
+}
+
+// ---------- Admin API (CLI) ----------
+
+func (h *Handler) adminTokenAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		auth := c.GetHeader("Authorization")
+		token := ""
+		if len(auth) > 7 && auth[:7] == "Bearer " {
+			token = auth[7:]
+		}
+		expected := h.DB.GetSetting("admin_api_token")
+		if expected == "" || token != expected {
+			c.JSON(401, gin.H{"error": "unauthorized"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func (h *Handler) AdminStatus(c *gin.Context) {
+	hosts, _ := h.DB.ListHostsWithMetrics()
+	expiring, _ := h.DB.ExpiringHosts(30 * 24 * time.Hour)
+	var monthlyCost float64
+	for _, hw := range hosts {
+		switch hw.BillingCycle {
+		case "monthly":
+			monthlyCost += hw.Cost
+		case "quarterly":
+			monthlyCost += hw.Cost / 3
+		case "yearly":
+			monthlyCost += hw.Cost / 12
+		default:
+			monthlyCost += hw.Cost
+		}
+	}
+	c.JSON(200, gin.H{
+		"total_hosts":    len(hosts),
+		"online_hosts":   countByStatus(hosts, "online"),
+		"offline_hosts":  countByStatus(hosts, "offline"),
+		"active_alerts":  h.DB.CountActiveAlerts(),
+		"monthly_cost":   monthlyCost,
+		"expiring_hosts": len(expiring),
+	})
+}
+
+func (h *Handler) AdminListHosts(c *gin.Context) {
+	hosts, _ := h.DB.ListHostsWithMetrics()
+	type hostJSON struct {
+		ID           int64   `json:"id"`
+		Name         string  `json:"name"`
+		IP           string  `json:"ip"`
+		Provider     string  `json:"provider"`
+		Plan         string  `json:"plan"`
+		Cost         float64 `json:"cost"`
+		Currency     string  `json:"currency"`
+		BillingCycle string  `json:"billing_cycle"`
+		Status       string  `json:"status"`
+		ExpireAt     *string `json:"expire_at"`
+		Note         string  `json:"note"`
+		Metric       *gin.H  `json:"metric"`
+	}
+	result := make([]hostJSON, 0, len(hosts))
+	for _, hw := range hosts {
+		h := hostJSON{
+			ID: hw.ID, Name: hw.Name, IP: hw.IP,
+			Provider: hw.Provider, Plan: hw.Plan,
+			Cost: hw.Cost, Currency: hw.Currency, BillingCycle: hw.BillingCycle,
+			Status: hw.Status, Note: hw.Note,
+		}
+		if hw.ExpireAt != nil {
+			s := hw.ExpireAt.Format(time.RFC3339)
+			h.ExpireAt = &s
+		}
+		if hw.LatestMetric != nil {
+			m := hw.LatestMetric
+			h.Metric = &gin.H{
+				"cpu_percent": m.CPUPercent,
+				"mem_used":    m.MemUsed, "mem_total": m.MemTotal,
+				"disk_used":   m.DiskUsed, "disk_total": m.DiskTotal,
+				"load1":       m.Load1, "uptime": m.Uptime,
+			}
+		}
+		result = append(result, h)
+	}
+	c.JSON(200, result)
+}
+
+func (h *Handler) AdminGetHost(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	host, err := h.DB.GetHost(id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	m, _ := h.DB.LatestMetric(id)
+	resp := gin.H{
+		"id": host.ID, "name": host.Name, "ip": host.IP,
+		"provider": host.Provider, "plan": host.Plan,
+		"cost": host.Cost, "currency": host.Currency, "billing_cycle": host.BillingCycle,
+		"status": host.Status, "note": host.Note,
+	}
+	if host.ExpireAt != nil {
+		resp["expire_at"] = host.ExpireAt.Format(time.RFC3339)
+	}
+	if m != nil {
+		resp["metric"] = gin.H{
+			"cpu_percent": m.CPUPercent,
+			"mem_used": m.MemUsed, "mem_total": m.MemTotal,
+			"disk_used": m.DiskUsed, "disk_total": m.DiskTotal,
+			"load1": m.Load1, "uptime": m.Uptime,
+		}
+	}
+	c.JSON(200, resp)
+}
+
+func (h *Handler) AdminAlerts(c *gin.Context) {
+	hosts, _ := h.DB.ListHosts()
+	type alertJSON struct {
+		ID        int64  `json:"id"`
+		HostID    int64  `json:"host_id"`
+		HostName  string `json:"host_name"`
+		Type      string `json:"type"`
+		Message   string `json:"message"`
+		Resolved  bool   `json:"resolved"`
+		CreatedAt string `json:"created_at"`
+	}
+	var result []alertJSON
+	for _, host := range hosts {
+		alerts, _ := h.DB.ListAlerts(host.ID, false)
+		for _, a := range alerts {
+			result = append(result, alertJSON{
+				ID: a.ID, HostID: host.ID, HostName: host.Name,
+				Type: a.Type, Message: a.Message, Resolved: a.Resolved,
+				CreatedAt: a.CreatedAt.Format("2006-01-02 15:04"),
+			})
+		}
+	}
+	c.JSON(200, result)
+}
+
+func (h *Handler) AdminExport(c *gin.Context) {
+	h.ExportHosts(c)
 }
 
 // ---------- Helpers ----------
